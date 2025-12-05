@@ -88,7 +88,7 @@ export function NewTaskDialog({ children }: { children: React.ReactNode }) {
         <DialogHeader>
           <DialogTitle>Create New Task</DialogTitle>
           <DialogDescription>
-            Add a new task to your board. Click save when you're done.
+            Add a new task to your board. Click save when you&apos;re done.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="grid gap-4 py-4">

@@ -62,6 +62,7 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
             <CardTitle className="text-sm font-medium leading-tight">
               {task.title}
             </CardTitle>
+            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
             <Badge variant={getPriorityColor(task.priority) as any} className="text-[10px] uppercase">
               {task.priority}
             </Badge>
@@ -78,6 +79,7 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
             <div className="flex items-center text-xs text-muted-foreground mt-2">
               <Clock className="h-3 w-3 mr-1" />
               {format(
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 (task.deadline as any).toDate ? (task.deadline as any).toDate() : task.deadline, 
                 "MMM d"
               )}

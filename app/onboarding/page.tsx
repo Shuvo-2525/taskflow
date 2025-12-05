@@ -103,7 +103,7 @@ export default function OnboardingPage() {
       <Card className="w-full max-w-lg">
         <CardHeader>
           <CardTitle>Welcome, {user?.displayName}!</CardTitle>
-          <CardDescription>Let's get you set up. Create a new workspace or join an existing one.</CardDescription>
+          <CardDescription>Let&apos;s get you set up. Create a new workspace or join an existing one.</CardDescription>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="create" className="w-full">

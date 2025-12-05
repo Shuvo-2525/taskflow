@@ -32,6 +32,7 @@ interface UserProfile {
 export default function TeamPage() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [companyData, setCompanyData] = useState<any>(null);
   const [members, setMembers] = useState<UserProfile[]>([]);
   const [requests, setRequests] = useState<UserProfile[]>([]);

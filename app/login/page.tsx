@@ -110,7 +110,7 @@ export default function LoginPage() {
         </CardContent>
         <CardFooter className="flex justify-center">
           <p className="text-sm text-muted-foreground">
-            Don't have an account? <span className="text-primary cursor-pointer hover:underline">Register</span>
+            Don&apos;t have an account? <span className="text-primary cursor-pointer hover:underline">Register</span>
           </p>
         </CardFooter>
       </Card>

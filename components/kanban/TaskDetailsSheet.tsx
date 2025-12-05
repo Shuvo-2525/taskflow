@@ -14,9 +14,7 @@ import {
   orderBy, 
   onSnapshot, 
   addDoc, 
-  serverTimestamp, 
-  doc, 
-  getDoc 
+  serverTimestamp
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -27,7 +25,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Clock, Send, User } from "lucide-react";
+import { Send, User } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -43,6 +41,7 @@ interface Comment {
   userId: string;
   userDisplayName: string;
   userPhoto?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   createdAt: any;
 }
 
