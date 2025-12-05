@@ -46,31 +46,60 @@ export default function KanbanBoard() {
 
   useEffect(() => {
     if (!user) return;
-    let unsubscribe = () => {};
+    
+    let isMounted = true; // Track if component is mounted
+    let unsubscribe = () => {}; // Placeholder for cleanup
 
     const setupSubscription = async () => {
       try {
         const userDoc = await getDoc(doc(db, "users", user.uid));
-        if (!userDoc.exists()) return;
         
-        const companyId = userDoc.data().currentCompanyId;
+        // If component unmounted while waiting, stop
+        if (!isMounted) return;
+
+        if (!userDoc.exists()) {
+            console.error("User profile not found");
+            setLoading(false); // Stop loading so screen isn't stuck
+            return;
+        }
+        
+        const userData = userDoc.data();
+        const companyId = userData?.currentCompanyId;
+
+        if (!companyId) {
+             console.error("User has no company assigned");
+             setLoading(false); // Stop loading
+             return;
+        }
+
         const q = query(collection(db, "tasks"), where("companyId", "==", companyId));
 
+        // Start Listener
         unsubscribe = onSnapshot(q, (snapshot) => {
+          if (!isMounted) return;
           const fetchedTasks = snapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data()
           })) as Task[];
           setTasks(fetchedTasks);
           setLoading(false);
+        }, (error) => {
+          console.error("Snapshot error:", error);
+          if (isMounted) setLoading(false);
         });
+
       } catch (error) {
         console.error("Error setting up task listener:", error);
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
+
     setupSubscription();
-    return () => unsubscribe();
+
+    return () => {
+        isMounted = false;
+        unsubscribe();
+    };
   }, [user]);
 
   const handleDragStart = (event: DragStartEvent) => {
