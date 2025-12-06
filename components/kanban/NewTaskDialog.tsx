@@ -36,7 +36,7 @@ interface Member {
 
 interface NewTaskDialogProps {
   children: React.ReactNode;
-  defaultAssignee?: string; // Allow passing a user ID to pre-select
+  defaultAssignee?: string;
 }
 
 export function NewTaskDialog({ children, defaultAssignee }: NewTaskDialogProps) {
@@ -44,42 +44,44 @@ export function NewTaskDialog({ children, defaultAssignee }: NewTaskDialogProps)
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [members, setMembers] = useState<Member[]>([]);
+  const [isMembersLoading, setIsMembersLoading] = useState(false); // Add member loading state
 
   // Form States
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("medium");
-  const [assignee, setAssignee] = useState(defaultAssignee || "");
+  const [assignee, setAssignee] = useState(""); // Initialize empty first
   const [deadline, setDeadline] = useState("");
 
-  // Fetch Company Members when dialog opens
+  // Fetch Members AND THEN set default assignee
   useEffect(() => {
     if (open && user) {
-        const fetchMembers = async () => {
+        const fetchData = async () => {
+            setIsMembersLoading(true);
             try {
-                // 1. Get current user's company
                 const userDoc = await getDoc(doc(db, "users", user.uid));
                 const companyId = userDoc.data()?.currentCompanyId;
                 
                 if (companyId) {
-                    // 2. Fetch all users in this company
                     const q = query(collection(db, "users"), where("currentCompanyId", "==", companyId));
                     const snapshot = await getDocs(q);
                     const fetchedMembers = snapshot.docs.map(d => d.data() as Member);
                     setMembers(fetchedMembers);
+                    
+                    // Only set default assignee AFTER members are loaded to ensure Select finds the value
+                    if (defaultAssignee) {
+                        setAssignee(defaultAssignee);
+                    }
                 }
             } catch (error) {
                 console.error("Failed to load members", error);
+            } finally {
+                setIsMembersLoading(false);
             }
         };
-        fetchMembers();
+        fetchData();
     }
-  }, [open, user]);
-
-  // Update assignee if defaultAssignee prop changes
-  useEffect(() => {
-    if (defaultAssignee) setAssignee(defaultAssignee);
-  }, [defaultAssignee]);
+  }, [open, user, defaultAssignee]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -87,7 +89,6 @@ export function NewTaskDialog({ children, defaultAssignee }: NewTaskDialogProps)
 
     setLoading(true);
     try {
-      // 1. Get User's Company ID
       const userDoc = await getDoc(doc(db, "users", user.uid));
       if (!userDoc.exists()) {
         toast.error("User profile not found");
@@ -95,9 +96,8 @@ export function NewTaskDialog({ children, defaultAssignee }: NewTaskDialogProps)
       }
       const companyId = userDoc.data().currentCompanyId;
 
-      // 2. Prepare Assignee Data (Denormalization)
       let assigneeData = {};
-      if (assignee) {
+      if (assignee && assignee !== "unassigned") {
         const selectedMember = members.find(m => m.uid === assignee);
         if (selectedMember) {
             assigneeData = {
@@ -108,7 +108,6 @@ export function NewTaskDialog({ children, defaultAssignee }: NewTaskDialogProps)
         }
       }
 
-      // 3. Create Task
       await addDoc(collection(db, "tasks"), {
         title,
         description,
@@ -124,7 +123,6 @@ export function NewTaskDialog({ children, defaultAssignee }: NewTaskDialogProps)
       toast.success("Task created successfully!");
       setOpen(false); 
       
-      // Reset form
       setTitle("");
       setDescription("");
       setPriority("medium");
@@ -137,6 +135,9 @@ export function NewTaskDialog({ children, defaultAssignee }: NewTaskDialogProps)
       setLoading(false);
     }
   };
+
+  // Get the display name for the placeholder manually if needed, though Select handles it if value matches option
+  const currentAssigneeName = members.find(m => m.uid === assignee)?.displayName;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -179,19 +180,28 @@ export function NewTaskDialog({ children, defaultAssignee }: NewTaskDialogProps)
             </div>
 
             <div className="grid gap-2">
-                <Label htmlFor="assignee">Assign To</Label>
-                <Select value={assignee} onValueChange={setAssignee}>
-                <SelectTrigger>
-                    <SelectValue placeholder="Unassigned" />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="unassigned">Unassigned</SelectItem>
-                    {members.map((m) => (
-                        <SelectItem key={m.uid} value={m.uid}>
-                            {m.displayName}
-                        </SelectItem>
-                    ))}
-                </SelectContent>
+                <Label htmlFor="assignee">
+                    Assign To {isMembersLoading && <span className="text-xs text-muted-foreground">(Loading...)</span>}
+                </Label>
+                <Select 
+                    value={assignee} 
+                    onValueChange={setAssignee} 
+                    disabled={isMembersLoading}
+                >
+                    <SelectTrigger>
+                        {/* Ensure placeholder shows correct name even if loading finishes late */}
+                        <SelectValue placeholder={defaultAssignee ? "Loading..." : "Unassigned"}>
+                             {currentAssigneeName || "Unassigned"}
+                        </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="unassigned">Unassigned</SelectItem>
+                        {members.map((m) => (
+                            <SelectItem key={m.uid} value={m.uid}>
+                                {m.displayName}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
                 </Select>
             </div>
           </div>

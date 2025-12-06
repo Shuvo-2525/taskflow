@@ -20,16 +20,17 @@ import { Task, TASK_STATUSES, TaskStatus } from "@/types";
 import { KanbanColumn } from "./KanbanColumn";
 import { TaskCard } from "./TaskCard";
 import { NewTaskDialog } from "./NewTaskDialog";
-import { TaskDetailsSheet } from "./TaskDetailsSheet"; // Import Sheet
+import { TaskDetailsSheet } from "./TaskDetailsSheet";
 import { toast } from "sonner";
 import { Loader2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 
 export default function KanbanBoard() {
   const { user } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [activeTask, setActiveTask] = useState<Task | null>(null); // For Dragging
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null); // For Details View
+  const [activeTask, setActiveTask] = useState<Task | null>(null);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -47,19 +48,17 @@ export default function KanbanBoard() {
   useEffect(() => {
     if (!user) return;
     
-    let isMounted = true; // Track if component is mounted
-    let unsubscribe = () => {}; // Placeholder for cleanup
+    let isMounted = true;
+    let unsubscribe = () => {};
 
     const setupSubscription = async () => {
       try {
         const userDoc = await getDoc(doc(db, "users", user.uid));
         
-        // If component unmounted while waiting, stop
         if (!isMounted) return;
 
         if (!userDoc.exists()) {
-            console.error("User profile not found");
-            setLoading(false); // Stop loading so screen isn't stuck
+            setLoading(false);
             return;
         }
         
@@ -67,14 +66,12 @@ export default function KanbanBoard() {
         const companyId = userData?.currentCompanyId;
 
         if (!companyId) {
-             console.error("User has no company assigned");
-             setLoading(false); // Stop loading
+             setLoading(false);
              return;
         }
 
         const q = query(collection(db, "tasks"), where("companyId", "==", companyId));
 
-        // Start Listener
         unsubscribe = onSnapshot(q, (snapshot) => {
           if (!isMounted) return;
           const fetchedTasks = snapshot.docs.map(doc => ({
@@ -143,7 +140,6 @@ export default function KanbanBoard() {
     setActiveTask(null);
   };
 
-  // Handler for opening the sheet
   const handleTaskClick = (task: Task) => {
     setSelectedTask(task);
     setIsSheetOpen(true);
@@ -153,8 +149,8 @@ export default function KanbanBoard() {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Project Tasks</h1>
+      <div className="flex justify-between items-center mb-6 px-1">
+        <h1 className="text-2xl font-bold tracking-tight">Project Board</h1>
         <NewTaskDialog>
           <Button>
               <Plus className="mr-2 h-4 w-4" /> New Task
@@ -162,20 +158,21 @@ export default function KanbanBoard() {
         </NewTaskDialog>
       </div>
 
-      <div className="flex-1 overflow-x-auto overflow-y-hidden">
+      {/* ScrollArea replaces the simple overflow div to fix "ugly scroller" */}
+      <ScrollArea className="flex-1 h-full rounded-lg border bg-slate-100/50 dark:bg-slate-900/50 p-4">
         <DndContext
           sensors={sensors}
           collisionDetection={closestCorners}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          <div className="flex gap-6 h-full pb-4 min-w-[1000px]">
+          <div className="flex gap-6 h-full min-w-[1000px]">
             {TASK_STATUSES.map((status) => (
               <KanbanColumn
                 key={status.id}
                 column={status}
                 tasks={tasks.filter((task) => task.status === status.id)}
-                onTaskClick={handleTaskClick} // Pass handler
+                onTaskClick={handleTaskClick}
               />
             ))}
           </div>
@@ -184,14 +181,14 @@ export default function KanbanBoard() {
             {activeTask ? <TaskCard task={activeTask} /> : null}
           </DragOverlay>
         </DndContext>
+        <ScrollBar orientation="horizontal" />
+      </ScrollArea>
 
-        {/* DETAILS SHEET */}
-        <TaskDetailsSheet 
-          task={selectedTask} 
-          isOpen={isSheetOpen} 
-          onClose={() => setIsSheetOpen(false)} 
-        />
-      </div>
+      <TaskDetailsSheet 
+        task={selectedTask} 
+        isOpen={isSheetOpen} 
+        onClose={() => setIsSheetOpen(false)} 
+      />
     </div>
   );
 }

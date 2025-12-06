@@ -2,10 +2,10 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Clock, MoreHorizontal, User } from "lucide-react";
+import { Clock, User } from "lucide-react";
 import { Task } from "@/types";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -55,13 +55,17 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
   const formatDate = (date: Timestamp | Date | null | undefined) => {
     if (!date) return null;
     
-    // Check if it's a Firestore Timestamp (has toDate function)
-    if ('toDate' in date && typeof date.toDate === 'function') {
-        return format(date.toDate(), "MMM d");
+    // Type guard for Firestore Timestamp
+    if (date instanceof Timestamp || (typeof (date as any).toDate === 'function')) {
+        return format((date as any).toDate(), "MMM d");
     }
     
-    // Treat as standard Javascript Date
-    return format(date as Date, "MMM d");
+    // Fallback for standard Date or string (if valid)
+    try {
+        return format(new Date(date as any), "MMM d");
+    } catch (e) {
+        return null;
+    }
   };
 
   return (
