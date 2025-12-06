@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { db } from "@/lib/firebase";
-import { doc, setDoc, addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, addDoc, collection, serverTimestamp, getDoc, updateDoc, arrayUnion } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,13 +20,53 @@ export default function OnboardingPage() {
 
   // Form States
   const [companyName, setCompanyName] = useState("");
-  const [joinCode, setJoinCode] = useState(""); // Simplified: User enters a Company ID to join
+  const [joinCode, setJoinCode] = useState("");
 
   useEffect(() => {
+    // 1. If auth is done loading and no user, go to login
     if (!authLoading && !user) {
       router.push("/login");
     }
+    
+    // 2. If user already has a company, go to Dashboard (prevent stuck in onboarding)
+    const checkExistingCompany = async () => {
+        if (user) {
+            const userDoc = await getDoc(doc(db, "users", user.uid));
+            if (userDoc.exists() && userDoc.data().currentCompanyId) {
+                router.push("/");
+            }
+        }
+    }
+    if (!authLoading) checkExistingCompany();
+
   }, [user, authLoading, router]);
+
+  const createOrUpdateUserProfile = async (companyId: string, role: string) => {
+    if (!user) return;
+    
+    // Check if user profile exists first
+    const userRef = doc(db, "users", user.uid);
+    const userSnap = await getDoc(userRef);
+
+    if (!userSnap.exists()) {
+        // Create new profile (Google Login case)
+        await setDoc(userRef, {
+            uid: user.uid,
+            email: user.email,
+            displayName: user.displayName || "User",
+            photoURL: user.photoURL,
+            role: role,
+            currentCompanyId: companyId,
+            createdAt: serverTimestamp()
+        });
+    } else {
+        // Update existing profile
+        await updateDoc(userRef, {
+            role: role,
+            currentCompanyId: companyId
+        });
+    }
+  };
 
   const handleCreateCompany = async () => {
     if (!companyName.trim()) return toast.error("Company name is required");
@@ -39,20 +79,12 @@ export default function OnboardingPage() {
         name: companyName,
         ownerId: user.uid,
         createdAt: serverTimestamp(),
-        members: [user.uid], // Owner is the first member
+        members: [user.uid],
         pendingRequests: []
       });
 
-      // 2. Create User Profile
-      await setDoc(doc(db, "users", user.uid), {
-        uid: user.uid,
-        email: user.email,
-        displayName: user.displayName || "Admin",
-        photoURL: user.photoURL,
-        role: "admin",
-        currentCompanyId: companyRef.id,
-        createdAt: serverTimestamp()
-      });
+      // 2. Create/Update User Profile
+      await createOrUpdateUserProfile(companyRef.id, "admin");
 
       toast.success("Company created successfully!");
       router.push("/"); // Go to Dashboard
@@ -70,23 +102,25 @@ export default function OnboardingPage() {
 
     setIsLoading(true);
     try {
-      // Note: In a real app, you'd check if company exists first.
-      
-      // 1. Create User Profile (as Pending/Employee)
-      await setDoc(doc(db, "users", user.uid), {
-        uid: user.uid,
-        email: user.email,
-        displayName: user.displayName || "Employee",
-        photoURL: user.photoURL,
-        role: "employee",
-        currentCompanyId: joinCode, // Temporarily assign them here
-        createdAt: serverTimestamp()
-      });
+      // 1. Check if company exists
+      const companyRef = doc(db, "companies", joinCode);
+      const companySnap = await getDoc(companyRef);
 
-      // 2. Add to Company's Pending Requests (Logic would go here, skipping for simplicity now)
-      // For now, we assume they just join.
+      if (!companySnap.exists()) {
+        toast.error("Company not found! Check the ID.");
+        return;
+      }
+
+      // 2. Create/Update User Profile
+      await createOrUpdateUserProfile(joinCode, "employee");
+
+      // 3. Add to Company's Members List (Directly for now, per user request simplicity)
+      // In a strict app, you might use 'pendingRequests'
+      await updateDoc(companyRef, {
+        members: arrayUnion(user.uid)
+      });
       
-      toast.success("Joined request sent!");
+      toast.success("Joined company successfully!");
       router.push("/");
     } catch (error) {
       console.error(error);
@@ -140,7 +174,7 @@ export default function OnboardingPage() {
               </div>
               <Button onClick={handleJoinCompany} variant="secondary" className="w-full" disabled={isLoading}>
                 {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Send Join Request
+                Join Workspace
               </Button>
             </TabsContent>
           </Tabs>

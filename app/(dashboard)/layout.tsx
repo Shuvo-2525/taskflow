@@ -17,52 +17,62 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     async function checkProfile() {
-      // Wait for auth to initialize
+      // 1. Wait for Auth to initialize
       if (authLoading) return;
       
-      // If not logged in, redirect to login
+      // 2. If no user, kick to login
       if (!user) {
         router.push("/login");
         return;
       }
 
       try {
+        // 3. Check if User Profile exists in Firestore
         const userDocRef = doc(db, "users", user.uid);
         const userDoc = await getDoc(userDocRef);
 
         if (userDoc.exists()) {
           const userData = userDoc.data();
+          
+          // 4. Check if they have completed onboarding (have a company)
+          if (!userData.currentCompanyId) {
+             router.push("/onboarding");
+             return;
+          }
+
           setRole(userData.role);
-          // Profile found, stop checking
           setIsChecking(false);
         } else {
-          // User logged in but no profile (e.g. skipped onboarding), redirect to onboarding
+          // 5. User authenticated but no profile (First time Google Login) -> Go to Onboarding
           router.push("/onboarding");
         }
       } catch (error: any) {
         console.error("Profile check error", error);
-        // Even on error, we must stop the loading spinner or the user gets stuck
-        setIsChecking(false);
         
-        // If it's an offline error, show a toast
-        if (error.code === 'unavailable' || error.message.includes("offline")) {
-             toast.error("You are offline. Using cached data if available.");
+        // Handle "Offline" error specifically to avoid blocking the UI forever
+        if (error.code === 'unavailable' || error.message?.includes("offline")) {
+             toast.error("Network error. Please check your connection.");
+             // Optional: You might want to allow access or show a specific offline screen here
         } else {
-             toast.error("Failed to load profile data.");
+             toast.error("Failed to verify account status.");
         }
+        setIsChecking(false); 
       }
     }
 
     checkProfile();
   }, [user, authLoading, router]);
 
-  // Show loader only while checking auth state or profile existence
+  // Loading Screen
   if (authLoading || isChecking) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-50 dark:bg-slate-900">
-        <div className="flex flex-col items-center gap-2">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">Loading workspace...</p>
+      <div className="flex h-screen w-full items-center justify-center bg-slate-50 dark:bg-slate-900">
+        <div className="flex flex-col items-center gap-3">
+            <Loader2 className="h-10 w-10 animate-spin text-primary" />
+            <div className="text-center">
+              <p className="text-sm font-medium">Setting up your workspace...</p>
+              <p className="text-xs text-muted-foreground">Verifying profile & company data</p>
+            </div>
         </div>
       </div>
     );
@@ -74,7 +84,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <Sidebar userRole={role} />
       
       {/* Main Content Area */}
-      <main className="flex-1 ml-64 p-8">
+      <main className="flex-1 ml-64 p-8 overflow-y-auto h-screen">
         {children}
       </main>
     </div>

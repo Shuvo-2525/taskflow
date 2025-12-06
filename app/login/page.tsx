@@ -33,6 +33,8 @@ export default function LoginPage() {
     try {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
+      // We do NOT create the user doc here for Google Login.
+      // The Dashboard Layout or Onboarding Page handles the "First Time User" check.
       router.push("/"); 
     } catch (error: any) {
       console.error("Google login error:", error);
@@ -62,7 +64,8 @@ export default function LoginPage() {
             await updateProfile(user, { displayName: name });
         }
 
-        // Create User Document in Firestore immediately
+        // Create User Document immediately for Email users
+        // They still need to pick a company in Onboarding, so currentCompanyId is null
         await setDoc(doc(db, "users", user.uid), {
             uid: user.uid,
             email: user.email,
@@ -73,7 +76,7 @@ export default function LoginPage() {
             currentCompanyId: null // Will be set during onboarding
         });
 
-        toast.success("Account created! Redirecting...");
+        toast.success("Account created!");
         router.push("/onboarding");
       }
     } catch (error: any) {
