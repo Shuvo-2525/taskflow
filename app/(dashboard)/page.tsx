@@ -270,12 +270,23 @@ export default function DashboardPage() {
                                     <p className="text-xs text-muted-foreground truncate">{task.description || "No description"}</p>
                                 </div>
 
-                                <div className="flex items-center gap-3 flex-shrink-0">
-                                    {task.assigneePhoto ? (
-                                        <Avatar className="h-8 w-8 border-2 border-white dark:border-slate-900 ring-1 ring-slate-100">
-                                            <AvatarImage src={task.assigneePhoto} />
-                                            <AvatarFallback>{task.assigneeName?.[0]}</AvatarFallback>
-                                        </Avatar>
+                                <div className="flex items-center -space-x-2 overflow-hidden pl-1 flex-shrink-0">
+                                    {task.assignees && task.assignees.length > 0 ? (
+                                        <>
+                                            {task.assignees.slice(0, 3).map((assignee, i) => (
+                                                <Avatar key={assignee.uid || i} className="h-8 w-8 border-2 border-white dark:border-slate-900 ring-1 ring-slate-100 inline-block">
+                                                    <AvatarImage src={assignee.photoURL} />
+                                                    <AvatarFallback className="text-[10px] bg-indigo-100 text-indigo-700 font-bold">
+                                                        {assignee.displayName?.charAt(0) || "U"}
+                                                    </AvatarFallback>
+                                                </Avatar>
+                                            ))}
+                                            {task.assignees.length > 3 && (
+                                                <div className="h-8 w-8 rounded-full bg-slate-100 ring-2 ring-white flex items-center justify-center text-[10px] font-medium text-slate-600 border-2 border-white">
+                                                    +{task.assignees.length - 3}
+                                                </div>
+                                            )}
+                                        </>
                                     ) : (
                                         <div className="h-8 w-8 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-xs text-slate-400 border border-dashed border-slate-300">
                                             NA
