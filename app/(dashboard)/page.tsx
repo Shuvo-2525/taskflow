@@ -235,7 +235,7 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* NEW SECTION: Employee Wise Task Lists */}
+      {/* Employee Workload Table */}
       <div className="grid grid-cols-1 gap-6">
         <Card>
             <CardHeader className="px-6 py-4 border-b">
@@ -352,32 +352,34 @@ export default function DashboardPage() {
                     ) : (
                         <div className="divide-y divide-slate-100 dark:divide-slate-800">
                             {notifications.map((notif) => (
-                                <div key={notif.id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors flex gap-3 items-start">
-                                    <Avatar className="h-8 w-8 mt-1">
+                                <div key={notif.id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors flex gap-3 items-start relative group">
+                                    <Avatar className="h-8 w-8 flex-shrink-0 mt-1">
                                         <AvatarImage src={notif.senderPhoto} />
                                         <AvatarFallback>{notif.senderName?.[0]}</AvatarFallback>
                                     </Avatar>
-                                    <div className="flex-1 space-y-1">
-                                        <p className="text-sm text-slate-800 dark:text-slate-200">
+                                    <div className="flex-1 space-y-1 min-w-0">
+                                        <p className="text-sm text-slate-800 dark:text-slate-200 break-words leading-snug">
                                             <span className="font-semibold">{notif.senderName}</span>
                                             {notif.type === 'task_assigned' ? (
                                                 <span className="text-slate-500"> assigned you a task: </span>
                                             ) : (
                                                 <span className="text-slate-500"> commented on: </span>
                                             )}
-                                            <span className="font-medium text-primary">{notif.taskTitle}</span>
+                                            <span className="font-medium text-primary block truncate">{notif.taskTitle}</span>
                                         </p>
                                         {notif.commentPreview && (
-                                            <p className="text-xs text-slate-500 italic border-l-2 pl-2 border-slate-200">
+                                            <p className="text-xs text-slate-500 italic border-l-2 pl-2 border-slate-200 line-clamp-2">
                                                 "{notif.commentPreview}"
                                             </p>
                                         )}
                                         <p className="text-[10px] text-slate-400">{formatTime(notif.createdAt)}</p>
                                     </div>
-                                    {notif.type === 'task_assigned' ? 
-                                        <CheckSquare className="h-4 w-4 text-blue-500 mt-1" /> : 
-                                        <MessageSquare className="h-4 w-4 text-green-500 mt-1" />
-                                    }
+                                    <div className="flex-shrink-0 pt-1">
+                                        {notif.type === 'task_assigned' ? 
+                                            <CheckSquare className="h-4 w-4 text-blue-500" /> : 
+                                            <MessageSquare className="h-4 w-4 text-green-500" />
+                                        }
+                                    </div>
                                 </div>
                             ))}
                         </div>

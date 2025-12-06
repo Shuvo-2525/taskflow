@@ -16,7 +16,9 @@ import {
   serverTimestamp, 
   doc,
   updateDoc,
-  Timestamp
+  deleteDoc,
+  getDocs,
+  where
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -28,9 +30,18 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Send, User, CalendarDays, Flag, Edit2, Check, X, Plus } from "lucide-react";
+import { Send, User, CalendarDays, Flag, Edit2, Check, X, Trash2, Users } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 interface TaskDetailsSheetProps {
   task: Task | null;
@@ -47,18 +58,33 @@ interface Comment {
   createdAt: any;
 }
 
+interface Member {
+  uid: string;
+  displayName: string;
+  email: string;
+  photoURL?: string;
+}
+
 export function TaskDetailsSheet({ task, isOpen, onClose }: TaskDetailsSheetProps) {
   const { user } = useAuth();
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState("");
   const [isSending, setIsSending] = useState(false);
-  const [isEditing, setIsEditing] = useState(false); // Edit mode state
+  const [isEditing, setIsEditing] = useState(false); 
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
   // Editing States
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editPriority, setEditPriority] = useState("medium");
+  
+  // Assignee Editing States
+  const [members, setMembers] = useState<Member[]>([]);
+  const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
+  const [isMembersLoading, setIsMembersLoading] = useState(false);
+  
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Initialize edit form
   useEffect(() => {
@@ -66,6 +92,9 @@ export function TaskDetailsSheet({ task, isOpen, onClose }: TaskDetailsSheetProp
           setEditTitle(task.title);
           setEditDescription(task.description || "");
           setEditPriority(task.priority);
+          // Initialize selected assignees from current task
+          const currentAssigneeIds = task.assignees?.map(a => a.uid) || [];
+          setSelectedAssignees(currentAssigneeIds);
       }
   }, [task]);
 
@@ -89,6 +118,28 @@ export function TaskDetailsSheet({ task, isOpen, onClose }: TaskDetailsSheetProp
     return () => unsubscribe();
   }, [task, isOpen]);
 
+  // Fetch Members when editing starts
+  useEffect(() => {
+      if (isEditing && task?.companyId) {
+          const fetchMembers = async () => {
+              setIsMembersLoading(true);
+              try {
+                  const q = query(collection(db, "users"), where("currentCompanyId", "==", task.companyId));
+                  const snapshot = await getDocs(q);
+                  const fetchedMembers = snapshot.docs.map(d => d.data() as Member);
+                  setMembers(fetchedMembers);
+              } catch (error) {
+                  console.error("Error fetching members", error);
+                  toast.error("Failed to load team members");
+              } finally {
+                  setIsMembersLoading(false);
+              }
+          };
+          fetchMembers();
+      }
+  }, [isEditing, task?.companyId]);
+
+
   const handleSendComment = async () => {
     if (!newComment.trim() || !user || !task) return;
 
@@ -105,7 +156,7 @@ export function TaskDetailsSheet({ task, isOpen, onClose }: TaskDetailsSheetProp
       // Notify assignees
       if (task.assignees && task.assignees.length > 0) {
           task.assignees.forEach(async (assignee) => {
-              if (assignee.uid !== user.uid) { // Don't notify self
+              if (assignee.uid !== user.uid) { 
                   await addDoc(collection(db, "notifications"), {
                       recipientId: assignee.uid,
                       senderId: user.uid,
@@ -132,16 +183,44 @@ export function TaskDetailsSheet({ task, isOpen, onClose }: TaskDetailsSheetProp
     }
   };
 
+  const handleAssigneeSelect = (uid: string) => {
+      if (!selectedAssignees.includes(uid)) {
+          setSelectedAssignees([...selectedAssignees, uid]);
+      }
+  };
+
+  const removeAssignee = (uid: string) => {
+      setSelectedAssignees(selectedAssignees.filter(id => id !== uid));
+  };
+
   const handleSaveEdit = async () => {
       if (!task || !task.id) return;
       setIsSaving(true);
       try {
           const taskRef = doc(db, "tasks", task.id);
+          
+          // Reconstruct assignee objects from selected IDs
+          const updatedAssignees = selectedAssignees.map(uid => {
+              // Check current task assignees first (optimization)
+              const existing = task.assignees?.find(a => a.uid === uid);
+              if (existing) return existing;
+              
+              // Fallback to finding in the fetched members list
+              const member = members.find(m => m.uid === uid);
+              return member ? {
+                  uid: member.uid,
+                  displayName: member.displayName,
+                  photoURL: member.photoURL || null
+              } : null;
+          }).filter(Boolean);
+
           await updateDoc(taskRef, {
               title: editTitle,
               description: editDescription,
-              priority: editPriority
+              priority: editPriority,
+              assignees: updatedAssignees
           });
+          
           toast.success("Task updated");
           setIsEditing(false);
       } catch (error) {
@@ -149,6 +228,22 @@ export function TaskDetailsSheet({ task, isOpen, onClose }: TaskDetailsSheetProp
           toast.error("Failed to update task");
       } finally {
           setIsSaving(false);
+      }
+  };
+
+  const handleDeleteTask = async () => {
+      if (!task || !task.id) return;
+      setIsDeleting(true);
+      try {
+          await deleteDoc(doc(db, "tasks", task.id));
+          toast.success("Task deleted successfully");
+          setIsDeleteDialogOpen(false);
+          onClose(); // Close sheet
+      } catch (error) {
+          console.error("Delete failed", error);
+          toast.error("Failed to delete task");
+      } finally {
+          setIsDeleting(false);
       }
   };
 
@@ -172,10 +267,6 @@ export function TaskDetailsSheet({ task, isOpen, onClose }: TaskDetailsSheetProp
   };
 
   if (!task) return null;
-
-  // Simple check if user is creator or admin (assuming companyId check is enough for now, deeper logic needs role check from auth provider context if strictly enforcing)
-  // For now, we allow edit if you are logged in (since it's an internal tool) or strictly creator
-  // Let's just show the edit button
   
   return (
     <Sheet open={isOpen} onOpenChange={(open) => { if(!open) setIsEditing(false); if(!open) onClose(); }}>
@@ -218,9 +309,34 @@ export function TaskDetailsSheet({ task, isOpen, onClose }: TaskDetailsSheetProp
                             </Button>
                          </>
                      ) : (
-                        <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setIsEditing(true)}>
-                            <Edit2 className="h-4 w-4 text-slate-500" />
-                        </Button>
+                        <div className="flex gap-1">
+                            {/* Delete Dialog */}
+                            <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+                                <DialogTrigger asChild>
+                                    <Button size="icon" variant="ghost" className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50">
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                </DialogTrigger>
+                                <DialogContent>
+                                    <DialogHeader>
+                                        <DialogTitle>Delete Task?</DialogTitle>
+                                        <DialogDescription>
+                                            This action cannot be undone. This will permanently delete the task "{task.title}".
+                                        </DialogDescription>
+                                    </DialogHeader>
+                                    <DialogFooter>
+                                        <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)} disabled={isDeleting}>Cancel</Button>
+                                        <Button variant="destructive" onClick={handleDeleteTask} disabled={isDeleting}>
+                                            {isDeleting ? "Deleting..." : "Delete"}
+                                        </Button>
+                                    </DialogFooter>
+                                </DialogContent>
+                            </Dialog>
+                            
+                            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setIsEditing(true)}>
+                                <Edit2 className="h-4 w-4 text-slate-500" />
+                            </Button>
+                        </div>
                      )}
                  </div>
             </div>
@@ -257,35 +373,85 @@ export function TaskDetailsSheet({ task, isOpen, onClose }: TaskDetailsSheetProp
           <ScrollArea className="flex-1 p-6">
             <div className="flex flex-col gap-8">
                 
-                {/* Assignees Section - Multiple */}
+                {/* Assignees Section */}
                 <div className="flex flex-col gap-3 p-4 rounded-lg border bg-slate-50 dark:bg-slate-900/30 shadow-sm">
                     <div className="flex justify-between items-center">
-                        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Assigned People</h4>
-                        {/* Could add an assign button here later */}
+                        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                            Assigned People
+                            {isEditing && isMembersLoading && <span className="text-[10px] font-normal animate-pulse">(Loading...)</span>}
+                        </h4>
                     </div>
                     
-                    <div className="flex flex-wrap gap-3">
-                        {task.assignees && task.assignees.length > 0 ? (
-                            task.assignees.map((assignee) => (
-                                <div key={assignee.uid} className="flex items-center gap-2 bg-white dark:bg-slate-800 px-2 py-1.5 rounded-md border shadow-sm">
-                                    <Avatar className="h-6 w-6 border border-slate-200">
-                                        <AvatarImage src={assignee.photoURL} />
-                                        <AvatarFallback className="text-[9px] bg-blue-50 text-blue-600">
-                                            {assignee.displayName?.charAt(0)}
-                                        </AvatarFallback>
-                                    </Avatar>
-                                    <span className="text-xs font-medium">{assignee.displayName}</span>
-                                </div>
-                            ))
-                        ) : (
-                            <div className="flex items-center gap-2 text-slate-500">
-                                <div className="h-8 w-8 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center border-2 border-dashed border-slate-300 dark:border-slate-700">
-                                    <User className="h-4 w-4" />
-                                </div>
-                                <span className="text-sm italic">No one assigned</span>
+                    {isEditing ? (
+                        <div className="space-y-3">
+                            <Select onValueChange={handleAssigneeSelect} disabled={isMembersLoading}>
+                                <SelectTrigger className="h-8 text-xs bg-white">
+                                    <SelectValue placeholder="Add assignee..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {members.map((m) => (
+                                        <SelectItem key={m.uid} value={m.uid} disabled={selectedAssignees.includes(m.uid)}>
+                                            <div className="flex items-center gap-2">
+                                                <Avatar className="h-4 w-4">
+                                                    <AvatarImage src={m.photoURL} />
+                                                    <AvatarFallback className="text-[6px]">{m.displayName?.[0]}</AvatarFallback>
+                                                </Avatar>
+                                                {m.displayName}
+                                            </div>
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            
+                            <div className="flex flex-wrap gap-2">
+                                {selectedAssignees.map(uid => {
+                                    // Try to find details in members array first, then fallback to current task info if not yet fetched
+                                    const memberInfo = members.find(m => m.uid === uid) || task.assignees?.find(a => a.uid === uid);
+                                    if (!memberInfo) return null;
+                                    
+                                    return (
+                                        <Badge key={uid} variant="secondary" className="pl-1 pr-2 py-1 flex items-center gap-1 bg-white border">
+                                            <Avatar className="h-4 w-4">
+                                                <AvatarImage src={memberInfo.photoURL} />
+                                                <AvatarFallback className="text-[6px]">{memberInfo.displayName?.[0]}</AvatarFallback>
+                                            </Avatar>
+                                            <span className="text-xs">{memberInfo.displayName}</span>
+                                            <button 
+                                                type="button"
+                                                onClick={() => removeAssignee(uid)} 
+                                                className="ml-1 hover:text-red-500"
+                                            >
+                                                <X className="h-3 w-3" />
+                                            </button>
+                                        </Badge>
+                                    )
+                                })}
                             </div>
-                        )}
-                    </div>
+                        </div>
+                    ) : (
+                        <div className="flex flex-wrap gap-3">
+                            {task.assignees && task.assignees.length > 0 ? (
+                                task.assignees.map((assignee) => (
+                                    <div key={assignee.uid} className="flex items-center gap-2 bg-white dark:bg-slate-800 px-2 py-1.5 rounded-md border shadow-sm">
+                                        <Avatar className="h-6 w-6 border border-slate-200">
+                                            <AvatarImage src={assignee.photoURL} />
+                                            <AvatarFallback className="text-[9px] bg-blue-50 text-blue-600">
+                                                {assignee.displayName?.charAt(0)}
+                                            </AvatarFallback>
+                                        </Avatar>
+                                        <span className="text-xs font-medium">{assignee.displayName}</span>
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="flex items-center gap-2 text-slate-500">
+                                    <div className="h-8 w-8 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center border-2 border-dashed border-slate-300 dark:border-slate-700">
+                                        <User className="h-4 w-4" />
+                                    </div>
+                                    <span className="text-sm italic">No one assigned</span>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* Description Section */}
