@@ -9,6 +9,7 @@ import { Clock, MoreHorizontal, User } from "lucide-react";
 import { Task } from "@/types";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { Timestamp } from "firebase/firestore";
 
 interface TaskCardProps {
   task: Task;
@@ -50,6 +51,19 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
     low: "bg-blue-100 text-blue-700 hover:bg-blue-100 border-blue-200",
   };
 
+  // Helper to safely format date from Firestore Timestamp or JS Date
+  const formatDate = (date: Timestamp | Date | null | undefined) => {
+    if (!date) return null;
+    
+    // Check if it's a Firestore Timestamp (has toDate function)
+    if ('toDate' in date && typeof date.toDate === 'function') {
+        return format(date.toDate(), "MMM d");
+    }
+    
+    // Treat as standard Javascript Date
+    return format(date as Date, "MMM d");
+  };
+
   return (
     <div
       ref={setNodeRef}
@@ -71,8 +85,6 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
             <Badge variant="outline" className={cn("text-[10px] font-bold uppercase tracking-wider h-5 px-1.5 border-0", priorityBadge[task.priority])}>
               {task.priority}
             </Badge>
-            {/* Placeholder for menu if needed later */}
-            {/* <MoreHorizontal className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" /> */}
           </div>
 
           <h4 className="text-sm font-semibold leading-tight text-slate-800 dark:text-slate-100">
@@ -94,7 +106,7 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
                     "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
                 )}>
                     <Clock className="h-3 w-3 mr-1" />
-                    {task.deadline?.toDate ? format(task.deadline.toDate(), "MMM d") : format(new Date(task.deadline as any), "MMM d")}
+                    {formatDate(task.deadline)}
                 </div>
                 ) : (
                     <span className="text-[10px] text-muted-foreground">No Due Date</span>
