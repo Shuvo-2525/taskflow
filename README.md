@@ -1,25 +1,113 @@
-TaskFlowTaskFlow is a modern, real-time task management and collaboration platform designed to streamline team workflows. Built with Next.js 16 and Firebase, it offers a seamless Kanban-style project management experience, real-time updates, and comprehensive team analytics.🚀 Features1. Authentication & OnboardingSecure Login: Support for Email/Password and Google Authentication via Firebase Auth.Workspace Setup: Seamless onboarding flow allowing users to create a new company workspace or join an existing one using a unique Invite Code.2. Real-time DashboardProject Overview: Visual statistics for pending vs. completed tasks.Team Insights: Real-time "Employee Workload" table showing exactly what each team member is working on, their backlog, and completed items.Activity Feed: Live notifications for task assignments and comments.3. Kanban Project BoardDrag-and-Drop Interface: Intuitive Kanban board (Todo, In Progress, Review, Done) powered by @dnd-kit.Task Management: Create, edit, and delete tasks with ease.Rich Details: Assign tasks to multiple members, set priorities (Low, Medium, High), and add due dates.Collaboration: Real-time commenting system on every task card.4. Team ManagementAdmin Controls: Admins can view and manage join requests.Member Directory: View all active team members and their roles.Easy Invites: One-click copy for company Invite IDs to grow your team.🛠️ Tech StackFramework: Next.js 16 (App Router)Language: TypeScriptStyling: Tailwind CSSBackend & Database: Firebase (Firestore, Authentication)UI Components: Shadcn UI (built on Radix UI)Icons: Lucide ReactCharts: RechartsDrag & Drop: @dnd-kit⚡ Getting StartedFollow these steps to set up the project locally.PrerequisitesNode.js (v18+ recommended)A Firebase Project setup1. Clone the Repositorygit clone [https://github.com/Shuvo-2525/taskflow.git](https://github.com/Shuvo-2525/taskflow.git)
+# TaskFlow
+
+TaskFlow is a modern, real-time task management and collaboration platform designed to streamline team workflows.  
+Built with Next.js 16 and Firebase, it offers a seamless Kanban-style project management experience, real-time updates, and comprehensive team analytics.
+
+## 🚀 Features
+
+### 1. Authentication & Onboarding
+- **Secure Login:** Supports Email/Password and Google Authentication via Firebase Auth.
+- **Workspace Setup:** Smooth onboarding allowing users to create a new company workspace or join an existing one using an Invite Code.
+
+### 2. Real-time Dashboard
+- **Project Overview:** Visual statistics for pending vs. completed tasks.
+- **Team Insights:** Real-time Employee Workload table.
+- **Activity Feed:** Live notifications for task assignments and comments.
+
+### 3. Kanban Project Board
+- **Drag-and-Drop Interface:** Powered by @dnd-kit.
+- **Task Management:** Create, edit, and delete tasks.
+- **Rich Details:** Assign multiple members, priorities, and due dates.
+- **Collaboration:** Real-time commenting on every task.
+
+### 4. Team Management
+- **Admin Controls:** Manage join requests.
+- **Member Directory:** View all team members and roles.
+- **Easy Invites:** One-click copy for Invite IDs.
+
+## 🛠️ Tech Stack
+- **Framework:** Next.js 16 (App Router)
+- **Language:** TypeScript
+- **Styling:** Tailwind CSS
+- **Backend:** Firebase (Firestore, Auth)
+- **UI:** Shadcn UI
+- **Icons:** Lucide React
+- **Charts:** Recharts
+- **Drag & Drop:** @dnd-kit
+
+## ⚡ Getting Started
+
+### Prerequisites
+- Node.js v18+
+- Firebase Project
+
+### 1. Clone the Repository
+```bash
+git clone https://github.com/Shuvo-2525/taskflow.git
 cd taskflow
-2. Install Dependenciesnpm install
+```
+
+### 2. Install Dependencies
+```bash
+npm install
 # or
 yarn install
 # or
 pnpm install
-3. Environment ConfigurationCreate a .env.local file in the root directory and add your Firebase credentials:NEXT_PUBLIC_FIREBASE_API_KEY=your_api_key
+```
+
+### 3. Environment Configuration
+Create `.env.local` and add:
+
+```
+NEXT_PUBLIC_FIREBASE_API_KEY=your_api_key
 NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_project_id.firebaseapp.com
 NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
 NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_project_id.firebasestorage.app
 NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id
 NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
-Note: You need to enable Authentication (Email/Google) and Firestore Database in your Firebase Console.4. Run the Development Servernpm run dev
-Open http://localhost:3000 with your browser to see the result.📖 Usage TutorialCreating an AccountNavigate to the login page.Sign up using your email or Google account.Onboarding: You will be prompted to either Create a Company (becoming the Admin) or Join an Existing Company using an ID provided by your manager.Managing TasksGo to the My Tasks or Project Board page.Click "New Task" to create a ticket.Fill in the title, description, priority, and deadline.Assign Members: Select one or multiple team members to handle the task.Move Tasks: Drag cards between columns (Todo -> In Progress -> Done) to update status instantly.Team CollaborationClick on any task card to open the Task Details.Use the Comments section to discuss details or updates.Admins can go to the Team page to approve new join requests or remove members.📂 Project Structuretaskflow/
-├── app/                 # Next.js App Router pages (Dashboard, Login, Team, etc.)
-├── components/          # Reusable UI components
-│   ├── kanban/          # Board, Columns, Cards, Dialogs
-│   ├── layout/          # Sidebar, Layout wrappers
-│   ├── providers/       # Context providers (Auth)
-│   └── ui/              # Shadcn primitive components
-├── lib/                 # Utility functions & Firebase config
-├── public/              # Static assets
-└── types/               # TypeScript interfaces
-👨‍💻 DeveloperMohammad Rafiq Shuvo GitHub: https://github.com/Shuvo-2525Built with ❤️ using Next.js and Firebase.
+```
+
+### 4. Run Development Server
+```bash
+npm run dev
+```
+
+Open http://localhost:3000
+
+## 📖 Usage Tutorial
+
+### Creating an Account
+- Sign up via email or Google.
+- Create a company or join via ID.
+
+### Managing Tasks
+- Create tasks with title, description, priority, deadline.
+- Assign members.
+- Drag between columns (Todo → In Progress → Done).
+
+### Team Collaboration
+- Comment inside task details.
+- Admins approve join requests.
+
+## 📂 Project Structure
+
+```
+taskflow/
+├── app/
+├── components/
+│   ├── kanban/
+│   ├── layout/
+│   ├── providers/
+│   └── ui/
+├── lib/
+├── public/
+└── types/
+```
+
+## 👨‍💻 Developer
+
+**Mohammad Rafiq Shuvo**  
+GitHub: https://github.com/Shuvo-2525
+
+Built with ❤️ using Next.js and Firebase.
