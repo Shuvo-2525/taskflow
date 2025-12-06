@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Loader2, Building2, Copy, Check } from "lucide-react";
+import { Loader2, Building2, Copy, Check, Clock } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
@@ -28,26 +28,38 @@ export default function OnboardingPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [companyName, setCompanyName] = useState("");
   const [joinCode, setJoinCode] = useState("");
-  
-  // List of companies for the "Join" tab
   const [companies, setCompanies] = useState<Company[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  
+  // State for pending request
+  const [hasPendingRequest, setHasPendingRequest] = useState(false);
+  const [pendingCompanyId, setPendingCompanyId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && !user) {
       router.push("/login");
+      return;
     }
     
-    const checkExistingCompany = async () => {
+    const checkUserStatus = async () => {
         if (user) {
             const userDoc = await getDoc(doc(db, "users", user.uid));
-            if (userDoc.exists() && userDoc.data().currentCompanyId) {
-                router.push("/");
+            if (userDoc.exists()) {
+                const userData = userDoc.data();
+                // If user already has a company assigned, go to dashboard
+                if (userData.currentCompanyId) {
+                    router.push("/");
+                }
+                // Check if user has a pending request status in their profile (optional, but good for persistence)
+                // Alternatively, check the companies collection for requests from this user
+                if (userData.pendingCompanyId) {
+                    setHasPendingRequest(true);
+                    setPendingCompanyId(userData.pendingCompanyId);
+                }
             }
         }
     }
     
-    // Fetch companies for the list
     const fetchCompanies = async () => {
         try {
             const snapshot = await getDocs(collection(db, "companies"));
@@ -64,32 +76,36 @@ export default function OnboardingPage() {
     };
 
     if (!authLoading) {
-        checkExistingCompany();
+        checkUserStatus();
         fetchCompanies();
     }
 
   }, [user, authLoading, router]);
 
-  const createOrUpdateUserProfile = async (companyId: string, role: string) => {
+  const createOrUpdateUserProfile = async (role: string, companyId: string | null, pendingId: string | null) => {
     if (!user) return;
     
     const userRef = doc(db, "users", user.uid);
     const userSnap = await getDoc(userRef);
 
+    const data = {
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName || "User",
+        photoURL: user.photoURL,
+        role: role,
+        currentCompanyId: companyId,
+        pendingCompanyId: pendingId,
+        createdAt: serverTimestamp()
+    };
+
     if (!userSnap.exists()) {
-        await setDoc(userRef, {
-            uid: user.uid,
-            email: user.email,
-            displayName: user.displayName || "User",
-            photoURL: user.photoURL,
-            role: role,
-            currentCompanyId: companyId,
-            createdAt: serverTimestamp()
-        });
+        await setDoc(userRef, data);
     } else {
         await updateDoc(userRef, {
             role: role,
-            currentCompanyId: companyId
+            currentCompanyId: companyId,
+            pendingCompanyId: pendingId
         });
     }
   };
@@ -108,7 +124,8 @@ export default function OnboardingPage() {
         pendingRequests: []
       });
 
-      await createOrUpdateUserProfile(companyRef.id, "admin");
+      // Creator gets immediate access
+      await createOrUpdateUserProfile("admin", companyRef.id, null);
 
       toast.success("Company created successfully!");
       router.push("/"); 
@@ -120,7 +137,7 @@ export default function OnboardingPage() {
     }
   };
 
-  const handleJoinCompany = async (companyIdToJoin?: string) => {
+  const handleJoinRequest = async (companyIdToJoin?: string) => {
     const targetId = companyIdToJoin || joinCode;
     
     if (!targetId.trim()) return toast.error("Company ID is required");
@@ -137,16 +154,22 @@ export default function OnboardingPage() {
         return;
       }
 
-      await createOrUpdateUserProfile(targetId, "employee");
+      // Update User Profile to mark as pending
+      await createOrUpdateUserProfile("employee", null, targetId);
+
+      // Add user ID to Company's pendingRequests array
       await updateDoc(companyRef, {
-        members: arrayUnion(user.uid)
+        pendingRequests: arrayUnion(user.uid)
       });
       
-      toast.success("Joined company successfully!");
-      router.push("/");
+      setHasPendingRequest(true);
+      setPendingCompanyId(targetId);
+      toast.success("Request sent! Waiting for approval.");
+      
     } catch (error) {
       console.error(error);
-      toast.error("Failed to join company.");
+      toast.error("Failed to send request.");
+    } finally {
       setIsLoading(false);
     }
   };
@@ -159,6 +182,37 @@ export default function OnboardingPage() {
   };
 
   if (authLoading) return <div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin" /></div>;
+
+  // Render "Pending Approval" Screen
+  if (hasPendingRequest) {
+      return (
+        <div className="flex items-center justify-center min-h-screen bg-slate-50 dark:bg-slate-900 p-4">
+            <Card className="w-full max-w-md text-center shadow-lg border-0">
+                <CardHeader>
+                    <div className="mx-auto w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center mb-2">
+                        <Clock className="h-6 w-6 text-yellow-600" />
+                    </div>
+                    <CardTitle className="text-xl">Request Pending</CardTitle>
+                    <CardDescription>
+                        You have requested to join a workspace. Please wait for an administrator to approve your request.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="bg-slate-100 dark:bg-slate-800 p-3 rounded text-sm">
+                        Company ID: <span className="font-mono font-bold">{pendingCompanyId}</span>
+                    </div>
+                    <Button 
+                        variant="outline" 
+                        className="w-full"
+                        onClick={() => window.location.reload()}
+                    >
+                        Check Status
+                    </Button>
+                </CardContent>
+            </Card>
+        </div>
+      );
+  }
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-slate-50 dark:bg-slate-900 p-4">
@@ -202,9 +256,9 @@ export default function OnboardingPage() {
                   onChange={(e) => setJoinCode(e.target.value)}
                   className="font-mono"
                 />
-                <Button onClick={() => handleJoinCompany()} disabled={isLoading}>
+                <Button onClick={() => handleJoinRequest()} disabled={isLoading}>
                   {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
-                  {!isLoading && "Join"}
+                  {!isLoading && "Request to Join"}
                 </Button>
               </div>
 
@@ -248,10 +302,10 @@ export default function OnboardingPage() {
                                   <Button 
                                     size="sm" 
                                     variant="secondary"
-                                    onClick={() => handleJoinCompany(company.id)}
+                                    onClick={() => handleJoinRequest(company.id)}
                                     disabled={isLoading}
                                   >
-                                    Join
+                                    Request
                                   </Button>
                               </div>
                           ))

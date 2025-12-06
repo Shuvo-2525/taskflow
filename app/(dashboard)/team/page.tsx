@@ -85,12 +85,26 @@ export default function TeamPage() {
     if (!companyData) return;
     try {
       const companyRef = doc(db, "companies", companyData.id);
+      
+      // 1. Always remove from pending requests on company doc
       await updateDoc(companyRef, {
         pendingRequests: arrayRemove(targetUid)
       });
 
+      // 2. Also update the user's profile status
+      const userRef = doc(db, "users", targetUid);
+
       if (action === "accept") {
+        // Add to members list
         await updateDoc(companyRef, { members: arrayUnion(targetUid) });
+        
+        // Update user to officially be in the company
+        await updateDoc(userRef, {
+            currentCompanyId: companyData.id,
+            pendingCompanyId: null, // Clear pending status
+            role: "employee"
+        });
+
         const acceptedUser = requests.find(u => u.uid === targetUid);
         if (acceptedUser) {
           setMembers([...members, acceptedUser]);
@@ -98,6 +112,11 @@ export default function TeamPage() {
         }
         toast.success("User accepted");
       } else {
+        // Update user to clear pending status so they can try again or elsewhere
+        await updateDoc(userRef, {
+            pendingCompanyId: null
+        });
+
         setRequests(requests.filter(u => u.uid !== targetUid));
         toast.info("Request rejected");
       }

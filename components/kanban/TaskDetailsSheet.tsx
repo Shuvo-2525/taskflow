@@ -119,11 +119,11 @@ export function TaskDetailsSheet({ task, isOpen, onClose }: TaskDetailsSheetProp
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className="w-[400px] sm:w-[540px] flex flex-col h-full sm:max-w-[540px] p-0 gap-0">
+      <SheetContent className="w-[400px] sm:w-[540px] flex flex-col h-full sm:max-w-[540px] p-0 gap-0 border-l shadow-2xl">
         {/* Header Section */}
         <div className="p-6 pb-4 border-b bg-slate-50/50 dark:bg-slate-900/50">
             <div className="flex items-center justify-between mb-4">
-                 <Badge variant={getPriorityColor(task.priority) as any} className="uppercase text-[10px] tracking-wider font-bold px-2 py-0.5">
+                 <Badge variant={getPriorityColor(task.priority) as any} className="uppercase text-[10px] tracking-wider font-bold px-2 py-0.5 shadow-sm">
                     {task.priority} Priority
                  </Badge>
                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
@@ -153,9 +153,10 @@ export function TaskDetailsSheet({ task, isOpen, onClose }: TaskDetailsSheetProp
             <div className="flex flex-col gap-8">
                 
                 {/* Assignee Section - Improved UI */}
-                <div className="flex flex-col gap-3 p-4 rounded-lg border bg-slate-50 dark:bg-slate-900/30">
+                <div className="flex flex-col gap-3 p-4 rounded-lg border bg-slate-50 dark:bg-slate-900/30 shadow-sm">
                     <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Assigned To</h4>
                     <div className="flex items-center gap-3">
+                        {/* Logic Fix: Check if assignedTo exists, not just assigneeName (which might be missing if task created before update) */}
                         {task.assignedTo ? (
                             <>
                                 <Avatar className="h-10 w-10 border-2 border-white dark:border-slate-800 shadow-sm">
@@ -166,7 +167,7 @@ export function TaskDetailsSheet({ task, isOpen, onClose }: TaskDetailsSheetProp
                                 </Avatar>
                                 <div>
                                     <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                                        {task.assigneeName || "Unknown User"}
+                                        {task.assigneeName || "User"}
                                     </p>
                                     <p className="text-xs text-muted-foreground">Project Member</p>
                                 </div>
