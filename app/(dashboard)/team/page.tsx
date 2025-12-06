@@ -18,9 +18,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Check, X, Copy, Loader2, UserPlus } from "lucide-react";
+import { Check, X, Copy, Loader2, UserPlus, Briefcase } from "lucide-react";
+import { NewTaskDialog } from "@/components/kanban/NewTaskDialog";
 
-// Types for our user data
 interface UserProfile {
   uid: string;
   displayName: string;
@@ -43,7 +43,6 @@ export default function TeamPage() {
       if (!user) return;
 
       try {
-        // 1. Get current user's role and company ID
         const userDocRef = doc(db, "users", user.uid);
         const userSnap = await getDoc(userDocRef);
         
@@ -52,7 +51,6 @@ export default function TeamPage() {
         const companyId = userData.currentCompanyId;
         setIsAdmin(userData.role === "admin");
 
-        // 2. Get Company Data
         const companyDocRef = doc(db, "companies", companyId);
         const companySnap = await getDoc(companyDocRef);
         
@@ -60,14 +58,12 @@ export default function TeamPage() {
           const data = companySnap.data();
           setCompanyData({ id: companySnap.id, ...data });
 
-          // 3. Fetch details for Members
           if (data.members && data.members.length > 0) {
             const memberPromises = data.members.map((uid: string) => getDoc(doc(db, "users", uid)));
             const memberSnaps = await Promise.all(memberPromises);
             setMembers(memberSnaps.map(s => s.data() as UserProfile));
           }
 
-          // 4. Fetch details for Pending Requests
           if (data.pendingRequests && data.pendingRequests.length > 0) {
             const requestPromises = data.pendingRequests.map((uid: string) => getDoc(doc(db, "users", uid)));
             const requestSnaps = await Promise.all(requestPromises);
@@ -85,37 +81,26 @@ export default function TeamPage() {
     fetchData();
   }, [user]);
 
-  // Handle Accept/Reject
   const handleRequest = async (targetUid: string, action: "accept" | "reject") => {
     if (!companyData) return;
-
     try {
       const companyRef = doc(db, "companies", companyData.id);
-      
-      // Remove from pending
       await updateDoc(companyRef, {
         pendingRequests: arrayRemove(targetUid)
       });
 
       if (action === "accept") {
-        // Add to members list
-        await updateDoc(companyRef, {
-          members: arrayUnion(targetUid)
-        });
-        
-        // Update local state to reflect change instantly
+        await updateDoc(companyRef, { members: arrayUnion(targetUid) });
         const acceptedUser = requests.find(u => u.uid === targetUid);
         if (acceptedUser) {
           setMembers([...members, acceptedUser]);
           setRequests(requests.filter(u => u.uid !== targetUid));
         }
-        toast.success("User accepted to the team");
+        toast.success("User accepted");
       } else {
-        // Just remove from local state
         setRequests(requests.filter(u => u.uid !== targetUid));
         toast.info("Request rejected");
       }
-
     } catch (error) {
       console.error(error);
       toast.error("Action failed");
@@ -125,7 +110,7 @@ export default function TeamPage() {
   const copyInviteCode = () => {
     if (companyData?.id) {
       navigator.clipboard.writeText(companyData.id);
-      toast.success("Company ID copied to clipboard");
+      toast.success("Copied to clipboard");
     }
   };
 
@@ -139,7 +124,6 @@ export default function TeamPage() {
           <p className="text-muted-foreground">Manage your team members and permissions.</p>
         </div>
         
-        {/* Invite Box */}
         <Card className="w-full md:w-auto bg-slate-100 dark:bg-slate-800 border-none">
           <CardContent className="p-3 flex items-center gap-3">
             <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-full">
@@ -162,12 +146,10 @@ export default function TeamPage() {
           {isAdmin && <TabsTrigger value="requests">Pending Requests ({requests.length})</TabsTrigger>}
         </TabsList>
 
-        {/* ACTIVE MEMBERS TAB */}
         <TabsContent value="members" className="mt-4">
           <Card>
             <CardHeader>
               <CardTitle>Team Members</CardTitle>
-              <CardDescription>People currently working in {companyData?.name}.</CardDescription>
             </CardHeader>
             <CardContent>
               <Table>
@@ -176,7 +158,7 @@ export default function TeamPage() {
                     <TableHead>User</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Role</TableHead>
-                    <TableHead className="text-right">Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -196,7 +178,13 @@ export default function TeamPage() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <span className="text-green-600 text-sm font-medium">Active</span>
+                        {/* ASSIGN TASK BUTTON */}
+                        <NewTaskDialog defaultAssignee={member.uid}>
+                            <Button size="sm" variant="outline" className="gap-2">
+                                <Briefcase className="h-3.5 w-3.5" />
+                                Assign Task
+                            </Button>
+                        </NewTaskDialog>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -206,13 +194,11 @@ export default function TeamPage() {
           </Card>
         </TabsContent>
 
-        {/* REQUESTS TAB (ADMIN ONLY) */}
         {isAdmin && (
           <TabsContent value="requests" className="mt-4">
             <Card>
               <CardHeader>
                 <CardTitle>Join Requests</CardTitle>
-                <CardDescription>Employees waiting to join your workspace.</CardDescription>
               </CardHeader>
               <CardContent>
                 {requests.length === 0 ? (
@@ -238,19 +224,10 @@ export default function TeamPage() {
                           </TableCell>
                           <TableCell>{req.email}</TableCell>
                           <TableCell className="text-right space-x-2">
-                            <Button 
-                              size="sm" 
-                              variant="outline" 
-                              className="h-8 w-8 p-0 border-red-200 hover:bg-red-50 hover:text-red-600"
-                              onClick={() => handleRequest(req.uid, "reject")}
-                            >
+                            <Button size="sm" variant="outline" onClick={() => handleRequest(req.uid, "reject")}>
                               <X className="h-4 w-4" />
                             </Button>
-                            <Button 
-                              size="sm" 
-                              className="h-8 w-8 p-0 bg-green-600 hover:bg-green-700"
-                              onClick={() => handleRequest(req.uid, "accept")}
-                            >
+                            <Button size="sm" className="bg-green-600" onClick={() => handleRequest(req.uid, "accept")}>
                               <Check className="h-4 w-4" />
                             </Button>
                           </TableCell>

@@ -11,6 +11,8 @@ export interface Task {
   priority: TaskPriority;
   deadline?: Timestamp | Date | null;
   assignedTo?: string; // User UID
+  assigneeName?: string; // Denormalized for easy display
+  assigneePhoto?: string; // Denormalized for easy display
   createdBy?: string;
   companyId: string;
   createdAt?: Timestamp;
