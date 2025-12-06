@@ -6,7 +6,6 @@ import {
   SheetContent, 
   SheetHeader, 
   SheetTitle, 
-  SheetDescription 
 } from "@/components/ui/sheet";
 import { 
   collection, 
@@ -15,8 +14,6 @@ import {
   onSnapshot, 
   addDoc, 
   serverTimestamp, 
-  doc, 
-  getDoc 
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -25,9 +22,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Clock, Send, User, CalendarDays, Flag } from "lucide-react";
+import { Send, User, CalendarDays, Flag } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -56,7 +52,6 @@ export function TaskDetailsSheet({ task, isOpen, onClose }: TaskDetailsSheetProp
   useEffect(() => {
     if (!task?.id || !isOpen) return;
 
-    // Comments are a sub-collection of the Task
     const q = query(
       collection(db, "tasks", task.id, "comments"), 
       orderBy("createdAt", "desc")
@@ -78,6 +73,7 @@ export function TaskDetailsSheet({ task, isOpen, onClose }: TaskDetailsSheetProp
 
     setIsSending(true);
     try {
+      // 1. Add Comment
       await addDoc(collection(db, "tasks", task.id, "comments"), {
         text: newComment,
         userId: user.uid,
@@ -85,6 +81,29 @@ export function TaskDetailsSheet({ task, isOpen, onClose }: TaskDetailsSheetProp
         userPhoto: user.photoURL || null,
         createdAt: serverTimestamp()
       });
+
+      // 2. Create Notification for Assignee (if it's not me)
+      if (task.assignedTo && task.assignedTo !== user.uid) {
+        await addDoc(collection(db, "notifications"), {
+            recipientId: task.assignedTo,
+            senderId: user.uid,
+            senderName: user.displayName,
+            senderPhoto: user.photoURL,
+            type: "comment",
+            taskId: task.id,
+            taskTitle: task.title,
+            commentPreview: newComment.substring(0, 50),
+            isRead: false,
+            createdAt: serverTimestamp(),
+            companyId: task.companyId
+        });
+      }
+      
+      // 3. Create Notification for Creator (if it's not me AND not the assignee to avoid double notify)
+      // Note: This is optional logic, strictly adhering to "Any task's assigned task's comments reply"
+      // Assuming "Assigned task's comments" usually implies notifying the assignee. 
+      // If the assignee replies, maybe notify the creator? Let's stick to assignee for now as requested.
+
       setNewComment("");
     } catch (error) {
       console.error("Failed to send comment", error);
@@ -97,13 +116,12 @@ export function TaskDetailsSheet({ task, isOpen, onClose }: TaskDetailsSheetProp
   const getPriorityColor = (priority: string) => {
       switch (priority) {
           case "high": return "destructive";
-          case "medium": return "default"; // or a custom yellow if defined
+          case "medium": return "default"; 
           case "low": return "secondary";
           default: return "outline";
       }
   };
 
-  // Helper to safely format date
   const formatDate = (date: any) => {
       if (!date) return "No deadline set";
       if (date.toDate) return format(date.toDate(), "PPP");
@@ -152,11 +170,10 @@ export function TaskDetailsSheet({ task, isOpen, onClose }: TaskDetailsSheetProp
           <ScrollArea className="flex-1 p-6">
             <div className="flex flex-col gap-8">
                 
-                {/* Assignee Section - Improved UI */}
+                {/* Assignee Section */}
                 <div className="flex flex-col gap-3 p-4 rounded-lg border bg-slate-50 dark:bg-slate-900/30 shadow-sm">
                     <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Assigned To</h4>
                     <div className="flex items-center gap-3">
-                        {/* Logic Fix: Check if assignedTo exists, not just assigneeName (which might be missing if task created before update) */}
                         {task.assignedTo ? (
                             <>
                                 <Avatar className="h-10 w-10 border-2 border-white dark:border-slate-800 shadow-sm">
@@ -208,7 +225,6 @@ export function TaskDetailsSheet({ task, isOpen, onClose }: TaskDetailsSheetProp
                         ) : (
                             comments.map((comment) => (
                                 <div key={comment.id} className="flex gap-3 group relative">
-                                    {/* Connector Line */}
                                     <div className="absolute left-4 top-10 bottom-[-24px] w-[2px] bg-slate-100 dark:bg-slate-800 group-last:hidden" />
                                     
                                     <Avatar className="h-8 w-8 border-2 border-white dark:border-slate-950 z-10 mt-1">
@@ -267,9 +283,6 @@ export function TaskDetailsSheet({ task, isOpen, onClose }: TaskDetailsSheetProp
                 </Button>
               </div>
             </div>
-            <p className="text-[10px] text-muted-foreground text-right mt-2 mr-1">
-                Press <kbd className="font-mono bg-slate-100 px-1 rounded">Enter</kbd> to send
-            </p>
           </div>
         </div>
       </SheetContent>

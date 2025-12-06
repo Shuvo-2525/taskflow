@@ -44,13 +44,13 @@ export function NewTaskDialog({ children, defaultAssignee }: NewTaskDialogProps)
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [members, setMembers] = useState<Member[]>([]);
-  const [isMembersLoading, setIsMembersLoading] = useState(false); // Add member loading state
+  const [isMembersLoading, setIsMembersLoading] = useState(false);
 
   // Form States
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("medium");
-  const [assignee, setAssignee] = useState(""); // Initialize empty first
+  const [assignee, setAssignee] = useState(""); 
   const [deadline, setDeadline] = useState("");
 
   // Fetch Members AND THEN set default assignee
@@ -68,7 +68,6 @@ export function NewTaskDialog({ children, defaultAssignee }: NewTaskDialogProps)
                     const fetchedMembers = snapshot.docs.map(d => d.data() as Member);
                     setMembers(fetchedMembers);
                     
-                    // Only set default assignee AFTER members are loaded to ensure Select finds the value
                     if (defaultAssignee) {
                         setAssignee(defaultAssignee);
                     }
@@ -97,9 +96,12 @@ export function NewTaskDialog({ children, defaultAssignee }: NewTaskDialogProps)
       const companyId = userDoc.data().currentCompanyId;
 
       let assigneeData = {};
+      let assignedToUid = null;
+
       if (assignee && assignee !== "unassigned") {
         const selectedMember = members.find(m => m.uid === assignee);
         if (selectedMember) {
+            assignedToUid = selectedMember.uid;
             assigneeData = {
                 assignedTo: selectedMember.uid,
                 assigneeName: selectedMember.displayName,
@@ -108,7 +110,7 @@ export function NewTaskDialog({ children, defaultAssignee }: NewTaskDialogProps)
         }
       }
 
-      await addDoc(collection(db, "tasks"), {
+      const taskRef = await addDoc(collection(db, "tasks"), {
         title,
         description,
         priority,
@@ -119,6 +121,22 @@ export function NewTaskDialog({ children, defaultAssignee }: NewTaskDialogProps)
         deadline: deadline ? Timestamp.fromDate(new Date(deadline)) : null,
         ...assigneeData
       });
+
+      // Create Notification if assigned to someone else
+      if (assignedToUid && assignedToUid !== user.uid) {
+          await addDoc(collection(db, "notifications"), {
+              recipientId: assignedToUid,
+              senderId: user.uid,
+              senderName: user.displayName,
+              senderPhoto: user.photoURL,
+              type: "task_assigned",
+              taskId: taskRef.id,
+              taskTitle: title,
+              isRead: false,
+              createdAt: serverTimestamp(),
+              companyId
+          });
+      }
 
       toast.success("Task created successfully!");
       setOpen(false); 
@@ -136,7 +154,6 @@ export function NewTaskDialog({ children, defaultAssignee }: NewTaskDialogProps)
     }
   };
 
-  // Get the display name for the placeholder manually if needed, though Select handles it if value matches option
   const currentAssigneeName = members.find(m => m.uid === assignee)?.displayName;
 
   return (
@@ -189,7 +206,6 @@ export function NewTaskDialog({ children, defaultAssignee }: NewTaskDialogProps)
                     disabled={isMembersLoading}
                 >
                     <SelectTrigger>
-                        {/* Ensure placeholder shows correct name even if loading finishes late */}
                         <SelectValue placeholder={defaultAssignee ? "Loading..." : "Unassigned"}>
                              {currentAssigneeName || "Unassigned"}
                         </SelectValue>
