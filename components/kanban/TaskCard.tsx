@@ -38,7 +38,6 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
     opacity: isDragging ? 0.5 : 1,
   };
 
-  // Priority Colors
   const priorityColor = {
     high: "border-l-red-500",
     medium: "border-l-yellow-500",
@@ -51,16 +50,11 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
     low: "bg-blue-100 text-blue-700 hover:bg-blue-100 border-blue-200",
   };
 
-  // Helper to safely format date from Firestore Timestamp or JS Date
   const formatDate = (date: Timestamp | Date | null | undefined) => {
     if (!date) return null;
-    
-    // Type guard for Firestore Timestamp
     if (date instanceof Timestamp || (typeof (date as any).toDate === 'function')) {
         return format((date as any).toDate(), "MMM d");
     }
-    
-    // Fallback for standard Date or string (if valid)
     try {
         return format(new Date(date as any), "MMM d");
     } catch (e) {
@@ -84,7 +78,6 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
         )}
       >
         <CardContent className="p-4 space-y-3">
-          {/* Header: Badge & Title */}
           <div className="flex justify-between items-start gap-2">
             <Badge variant="outline" className={cn("text-[10px] font-bold uppercase tracking-wider h-5 px-1.5 border-0", priorityBadge[task.priority])}>
               {task.priority}
@@ -102,7 +95,6 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
           )}
           
           <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800 mt-2">
-            {/* Deadline */}
             <div className="flex items-center gap-2">
                 {task.deadline ? (
                 <div className={cn(
@@ -117,19 +109,30 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
                 )}
             </div>
 
-            {/* Assignee Avatar */}
-            {task.assignedTo ? (
-               <Avatar className="h-6 w-6 ring-2 ring-white dark:ring-slate-950">
-                  <AvatarImage src={task.assigneePhoto} />
-                  <AvatarFallback className="text-[9px] bg-indigo-100 text-indigo-700 font-bold">
-                      {task.assigneeName?.charAt(0) || "U"}
-                  </AvatarFallback>
-               </Avatar>
-            ) : (
-                <div className="h-6 w-6 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center ring-2 ring-white dark:ring-slate-950">
-                    <User className="h-3 w-3 text-slate-400" />
-                </div>
-            )}
+            {/* Assignee Avatars - Show up to 3 */}
+            <div className="flex items-center -space-x-2 overflow-hidden pl-1">
+                {task.assignees && task.assignees.length > 0 ? (
+                    <>
+                        {task.assignees.slice(0, 3).map((assignee, i) => (
+                            <Avatar key={assignee.uid || i} className="h-6 w-6 ring-2 ring-white dark:ring-slate-950 inline-block">
+                                <AvatarImage src={assignee.photoURL} />
+                                <AvatarFallback className="text-[9px] bg-indigo-100 text-indigo-700 font-bold">
+                                    {assignee.displayName?.charAt(0) || "U"}
+                                </AvatarFallback>
+                            </Avatar>
+                        ))}
+                        {task.assignees.length > 3 && (
+                            <div className="h-6 w-6 rounded-full bg-slate-100 ring-2 ring-white flex items-center justify-center text-[9px] font-medium text-slate-600">
+                                +{task.assignees.length - 3}
+                            </div>
+                        )}
+                    </>
+                ) : (
+                    <div className="h-6 w-6 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center ring-2 ring-white dark:ring-slate-950">
+                        <User className="h-3 w-3 text-slate-400" />
+                    </div>
+                )}
+            </div>
           </div>
         </CardContent>
       </Card>

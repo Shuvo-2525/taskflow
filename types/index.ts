@@ -3,6 +3,12 @@ import { Timestamp } from "firebase/firestore";
 export type TaskStatus = "todo" | "in-progress" | "review" | "done";
 export type TaskPriority = "low" | "medium" | "high";
 
+export interface Assignee {
+  uid: string;
+  displayName: string;
+  photoURL?: string;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -10,9 +16,7 @@ export interface Task {
   status: TaskStatus;
   priority: TaskPriority;
   deadline?: Timestamp | Date | null;
-  assignedTo?: string; // User UID
-  assigneeName?: string; // Denormalized for easy display
-  assigneePhoto?: string; // Denormalized for easy display
+  assignees?: Assignee[]; // Changed from single assignedTo to array
   createdBy?: string;
   companyId: string;
   createdAt?: Timestamp;

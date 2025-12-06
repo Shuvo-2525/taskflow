@@ -25,7 +25,9 @@ import { addDoc, collection, serverTimestamp, getDoc, doc, query, where, getDocs
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { toast } from "sonner";
-import { Loader2, Calendar as CalendarIcon } from "lucide-react";
+import { Loader2, Calendar as CalendarIcon, X } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 
 interface Member {
   uid: string;
@@ -50,10 +52,10 @@ export function NewTaskDialog({ children, defaultAssignee }: NewTaskDialogProps)
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("medium");
-  const [assignee, setAssignee] = useState(""); 
+  const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]); // Array of UIDs
   const [deadline, setDeadline] = useState("");
 
-  // Fetch Members AND THEN set default assignee
+  // Fetch Members
   useEffect(() => {
     if (open && user) {
         const fetchData = async () => {
@@ -69,7 +71,7 @@ export function NewTaskDialog({ children, defaultAssignee }: NewTaskDialogProps)
                     setMembers(fetchedMembers);
                     
                     if (defaultAssignee) {
-                        setAssignee(defaultAssignee);
+                        setSelectedAssignees([defaultAssignee]);
                     }
                 }
             } catch (error) {
@@ -81,6 +83,17 @@ export function NewTaskDialog({ children, defaultAssignee }: NewTaskDialogProps)
         fetchData();
     }
   }, [open, user, defaultAssignee]);
+
+  const handleAssigneeSelect = (uid: string) => {
+      if (uid === "unassigned") return; // Do nothing
+      if (!selectedAssignees.includes(uid)) {
+          setSelectedAssignees([...selectedAssignees, uid]);
+      }
+  };
+
+  const removeAssignee = (uid: string) => {
+      setSelectedAssignees(selectedAssignees.filter(id => id !== uid));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,20 +108,15 @@ export function NewTaskDialog({ children, defaultAssignee }: NewTaskDialogProps)
       }
       const companyId = userDoc.data().currentCompanyId;
 
-      let assigneeData = {};
-      let assignedToUid = null;
-
-      if (assignee && assignee !== "unassigned") {
-        const selectedMember = members.find(m => m.uid === assignee);
-        if (selectedMember) {
-            assignedToUid = selectedMember.uid;
-            assigneeData = {
-                assignedTo: selectedMember.uid,
-                assigneeName: selectedMember.displayName,
-                assigneePhoto: selectedMember.photoURL || null
-            };
-        }
-      }
+      // Prepare Assignee Data array
+      const assigneesList = selectedAssignees.map(uid => {
+          const member = members.find(m => m.uid === uid);
+          return member ? {
+              uid: member.uid,
+              displayName: member.displayName,
+              photoURL: member.photoURL || null
+          } : null;
+      }).filter(Boolean); // Remove nulls
 
       const taskRef = await addDoc(collection(db, "tasks"), {
         title,
@@ -119,32 +127,37 @@ export function NewTaskDialog({ children, defaultAssignee }: NewTaskDialogProps)
         createdBy: user.uid,
         createdAt: serverTimestamp(),
         deadline: deadline ? Timestamp.fromDate(new Date(deadline)) : null,
-        ...assigneeData
+        assignees: assigneesList
       });
 
-      // Create Notification if assigned to someone else
-      if (assignedToUid && assignedToUid !== user.uid) {
-          await addDoc(collection(db, "notifications"), {
-              recipientId: assignedToUid,
-              senderId: user.uid,
-              senderName: user.displayName,
-              senderPhoto: user.photoURL,
-              type: "task_assigned",
-              taskId: taskRef.id,
-              taskTitle: title,
-              isRead: false,
-              createdAt: serverTimestamp(),
-              companyId
-          });
-      }
+      // Notifications for all assignees
+      const notificationPromises = assigneesList
+        .filter(a => a!.uid !== user.uid)
+        .map(a => 
+            addDoc(collection(db, "notifications"), {
+                recipientId: a!.uid,
+                senderId: user.uid,
+                senderName: user.displayName,
+                senderPhoto: user.photoURL,
+                type: "task_assigned",
+                taskId: taskRef.id,
+                taskTitle: title,
+                isRead: false,
+                createdAt: serverTimestamp(),
+                companyId
+            })
+        );
+      
+      await Promise.all(notificationPromises);
 
       toast.success("Task created successfully!");
       setOpen(false); 
       
+      // Reset
       setTitle("");
       setDescription("");
       setPriority("medium");
-      setAssignee("");
+      setSelectedAssignees([]);
       setDeadline("");
     } catch (error) {
       console.error(error);
@@ -153,8 +166,6 @@ export function NewTaskDialog({ children, defaultAssignee }: NewTaskDialogProps)
       setLoading(false);
     }
   };
-
-  const currentAssigneeName = members.find(m => m.uid === assignee)?.displayName;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -165,7 +176,7 @@ export function NewTaskDialog({ children, defaultAssignee }: NewTaskDialogProps)
         <DialogHeader>
           <DialogTitle>Create New Task</DialogTitle>
           <DialogDescription>
-            Assign work to your team.
+            Assign work to your team members.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="grid gap-4 py-4">
@@ -197,42 +208,65 @@ export function NewTaskDialog({ children, defaultAssignee }: NewTaskDialogProps)
             </div>
 
             <div className="grid gap-2">
-                <Label htmlFor="assignee">
-                    Assign To {isMembersLoading && <span className="text-xs text-muted-foreground">(Loading...)</span>}
-                </Label>
-                <Select 
-                    value={assignee} 
-                    onValueChange={setAssignee} 
-                    disabled={isMembersLoading}
-                >
-                    <SelectTrigger>
-                        <SelectValue placeholder={defaultAssignee ? "Loading..." : "Unassigned"}>
-                             {currentAssigneeName || "Unassigned"}
-                        </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="unassigned">Unassigned</SelectItem>
-                        {members.map((m) => (
-                            <SelectItem key={m.uid} value={m.uid}>
-                                {m.displayName}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
+                <Label htmlFor="deadline">Deadline</Label>
+                <div className="relative">
+                    <Input 
+                        id="deadline" 
+                        type="date"
+                        value={deadline}
+                        onChange={(e) => setDeadline(e.target.value)}
+                        className="pl-10"
+                    />
+                    <CalendarIcon className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                </div>
             </div>
           </div>
 
+          {/* Multi-select Assignee */}
           <div className="grid gap-2">
-            <Label htmlFor="deadline">Deadline</Label>
-            <div className="relative">
-                <Input 
-                    id="deadline" 
-                    type="date"
-                    value={deadline}
-                    onChange={(e) => setDeadline(e.target.value)}
-                    className="pl-10"
-                />
-                <CalendarIcon className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Label>Assign To {isMembersLoading && <span className="text-xs text-muted-foreground">(Loading...)</span>}</Label>
+            
+            <Select onValueChange={handleAssigneeSelect} disabled={isMembersLoading}>
+                <SelectTrigger>
+                    <SelectValue placeholder="Select members..." />
+                </SelectTrigger>
+                <SelectContent>
+                    {members.map((m) => (
+                        <SelectItem key={m.uid} value={m.uid} disabled={selectedAssignees.includes(m.uid)}>
+                            <div className="flex items-center gap-2">
+                                <Avatar className="h-5 w-5">
+                                    <AvatarImage src={m.photoURL} />
+                                    <AvatarFallback className="text-[8px]">{m.displayName[0]}</AvatarFallback>
+                                </Avatar>
+                                {m.displayName}
+                            </div>
+                        </SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+
+            {/* Selected Tags */}
+            <div className="flex flex-wrap gap-2 mt-1">
+                {selectedAssignees.map(uid => {
+                    const m = members.find(mem => mem.uid === uid);
+                    if (!m) return null;
+                    return (
+                        <Badge key={uid} variant="secondary" className="pl-1 pr-2 py-1 flex items-center gap-1">
+                            <Avatar className="h-4 w-4">
+                                <AvatarImage src={m.photoURL} />
+                                <AvatarFallback className="text-[6px]">{m.displayName[0]}</AvatarFallback>
+                            </Avatar>
+                            <span className="text-xs">{m.displayName}</span>
+                            <button 
+                                type="button"
+                                onClick={() => removeAssignee(uid)} 
+                                className="ml-1 hover:text-destructive"
+                            >
+                                <X className="h-3 w-3" />
+                            </button>
+                        </Badge>
+                    )
+                })}
             </div>
           </div>
 

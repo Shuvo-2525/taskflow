@@ -14,6 +14,9 @@ import {
   onSnapshot, 
   addDoc, 
   serverTimestamp, 
+  doc,
+  updateDoc,
+  Timestamp
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -21,9 +24,11 @@ import { Task } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Send, User, CalendarDays, Flag } from "lucide-react";
+import { Send, User, CalendarDays, Flag, Edit2, Check, X, Plus } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -47,6 +52,22 @@ export function TaskDetailsSheet({ task, isOpen, onClose }: TaskDetailsSheetProp
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [isEditing, setIsEditing] = useState(false); // Edit mode state
+
+  // Editing States
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editPriority, setEditPriority] = useState("medium");
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Initialize edit form
+  useEffect(() => {
+      if (task) {
+          setEditTitle(task.title);
+          setEditDescription(task.description || "");
+          setEditPriority(task.priority);
+      }
+  }, [task]);
 
   // Fetch Comments Real-time
   useEffect(() => {
@@ -73,7 +94,6 @@ export function TaskDetailsSheet({ task, isOpen, onClose }: TaskDetailsSheetProp
 
     setIsSending(true);
     try {
-      // 1. Add Comment
       await addDoc(collection(db, "tasks", task.id, "comments"), {
         text: newComment,
         userId: user.uid,
@@ -81,28 +101,27 @@ export function TaskDetailsSheet({ task, isOpen, onClose }: TaskDetailsSheetProp
         userPhoto: user.photoURL || null,
         createdAt: serverTimestamp()
       });
-
-      // 2. Create Notification for Assignee (if it's not me)
-      if (task.assignedTo && task.assignedTo !== user.uid) {
-        await addDoc(collection(db, "notifications"), {
-            recipientId: task.assignedTo,
-            senderId: user.uid,
-            senderName: user.displayName,
-            senderPhoto: user.photoURL,
-            type: "comment",
-            taskId: task.id,
-            taskTitle: task.title,
-            commentPreview: newComment.substring(0, 50),
-            isRead: false,
-            createdAt: serverTimestamp(),
-            companyId: task.companyId
-        });
-      }
       
-      // 3. Create Notification for Creator (if it's not me AND not the assignee to avoid double notify)
-      // Note: This is optional logic, strictly adhering to "Any task's assigned task's comments reply"
-      // Assuming "Assigned task's comments" usually implies notifying the assignee. 
-      // If the assignee replies, maybe notify the creator? Let's stick to assignee for now as requested.
+      // Notify assignees
+      if (task.assignees && task.assignees.length > 0) {
+          task.assignees.forEach(async (assignee) => {
+              if (assignee.uid !== user.uid) { // Don't notify self
+                  await addDoc(collection(db, "notifications"), {
+                      recipientId: assignee.uid,
+                      senderId: user.uid,
+                      senderName: user.displayName,
+                      senderPhoto: user.photoURL,
+                      type: "comment",
+                      taskId: task.id,
+                      taskTitle: task.title,
+                      commentPreview: newComment.substring(0, 50),
+                      isRead: false,
+                      createdAt: serverTimestamp(),
+                      companyId: task.companyId
+                  });
+              }
+          });
+      }
 
       setNewComment("");
     } catch (error) {
@@ -111,6 +130,26 @@ export function TaskDetailsSheet({ task, isOpen, onClose }: TaskDetailsSheetProp
     } finally {
       setIsSending(false);
     }
+  };
+
+  const handleSaveEdit = async () => {
+      if (!task || !task.id) return;
+      setIsSaving(true);
+      try {
+          const taskRef = doc(db, "tasks", task.id);
+          await updateDoc(taskRef, {
+              title: editTitle,
+              description: editDescription,
+              priority: editPriority
+          });
+          toast.success("Task updated");
+          setIsEditing(false);
+      } catch (error) {
+          console.error("Edit failed", error);
+          toast.error("Failed to update task");
+      } finally {
+          setIsSaving(false);
+      }
   };
 
   const getPriorityColor = (priority: string) => {
@@ -132,25 +171,73 @@ export function TaskDetailsSheet({ task, isOpen, onClose }: TaskDetailsSheetProp
       }
   };
 
-
   if (!task) return null;
 
+  // Simple check if user is creator or admin (assuming companyId check is enough for now, deeper logic needs role check from auth provider context if strictly enforcing)
+  // For now, we allow edit if you are logged in (since it's an internal tool) or strictly creator
+  // Let's just show the edit button
+  
   return (
-    <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
+    <Sheet open={isOpen} onOpenChange={(open) => { if(!open) setIsEditing(false); if(!open) onClose(); }}>
       <SheetContent className="w-[400px] sm:w-[540px] flex flex-col h-full sm:max-w-[540px] p-0 gap-0 border-l shadow-2xl">
+        
         {/* Header Section */}
         <div className="p-6 pb-4 border-b bg-slate-50/50 dark:bg-slate-900/50">
+            {/* Header Actions Row */}
             <div className="flex items-center justify-between mb-4">
-                 <Badge variant={getPriorityColor(task.priority) as any} className="uppercase text-[10px] tracking-wider font-bold px-2 py-0.5 shadow-sm">
-                    {task.priority} Priority
-                 </Badge>
-                 <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                     {task.status.replace("-", " ")}
-                 </span>
+                 {isEditing ? (
+                     <Select value={editPriority} onValueChange={setEditPriority}>
+                        <SelectTrigger className="w-[140px] h-8 text-xs">
+                            <SelectValue placeholder="Priority" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="low">Low</SelectItem>
+                            <SelectItem value="medium">Medium</SelectItem>
+                            <SelectItem value="high">High</SelectItem>
+                        </SelectContent>
+                     </Select>
+                 ) : (
+                    <div className="flex items-center gap-2">
+                        <Badge variant={getPriorityColor(task.priority) as any} className="uppercase text-[10px] tracking-wider font-bold px-2 py-0.5 shadow-sm">
+                            {task.priority} Priority
+                        </Badge>
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            {task.status.replace("-", " ")}
+                        </span>
+                    </div>
+                 )}
+
+                 <div className="flex gap-2">
+                     {isEditing ? (
+                         <>
+                            <Button size="sm" variant="ghost" onClick={() => setIsEditing(false)} disabled={isSaving}>
+                                <X className="h-4 w-4" />
+                            </Button>
+                            <Button size="sm" onClick={handleSaveEdit} disabled={isSaving}>
+                                <Check className="h-4 w-4 mr-1" /> Save
+                            </Button>
+                         </>
+                     ) : (
+                        <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setIsEditing(true)}>
+                            <Edit2 className="h-4 w-4 text-slate-500" />
+                        </Button>
+                     )}
+                 </div>
             </div>
-            <SheetTitle className="text-xl sm:text-2xl font-bold leading-tight text-slate-900 dark:text-slate-100">
-                {task.title}
-            </SheetTitle>
+
+            {/* Title */}
+            {isEditing ? (
+                <Input 
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    className="text-xl font-bold mb-2 h-auto py-2"
+                />
+            ) : (
+                <SheetTitle className="text-xl sm:text-2xl font-bold leading-tight text-slate-900 dark:text-slate-100">
+                    {task.title}
+                </SheetTitle>
+            )}
+
             <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
                  <div className="flex items-center gap-1.5">
                      <CalendarDays className="h-3.5 w-3.5" />
@@ -170,29 +257,30 @@ export function TaskDetailsSheet({ task, isOpen, onClose }: TaskDetailsSheetProp
           <ScrollArea className="flex-1 p-6">
             <div className="flex flex-col gap-8">
                 
-                {/* Assignee Section */}
+                {/* Assignees Section - Multiple */}
                 <div className="flex flex-col gap-3 p-4 rounded-lg border bg-slate-50 dark:bg-slate-900/30 shadow-sm">
-                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Assigned To</h4>
-                    <div className="flex items-center gap-3">
-                        {task.assignedTo ? (
-                            <>
-                                <Avatar className="h-10 w-10 border-2 border-white dark:border-slate-800 shadow-sm">
-                                    <AvatarImage src={task.assigneePhoto} />
-                                    <AvatarFallback className="bg-blue-100 text-blue-700 font-bold">
-                                        {task.assigneeName?.charAt(0) || "U"}
-                                    </AvatarFallback>
-                                </Avatar>
-                                <div>
-                                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                                        {task.assigneeName || "User"}
-                                    </p>
-                                    <p className="text-xs text-muted-foreground">Project Member</p>
+                    <div className="flex justify-between items-center">
+                        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Assigned People</h4>
+                        {/* Could add an assign button here later */}
+                    </div>
+                    
+                    <div className="flex flex-wrap gap-3">
+                        {task.assignees && task.assignees.length > 0 ? (
+                            task.assignees.map((assignee) => (
+                                <div key={assignee.uid} className="flex items-center gap-2 bg-white dark:bg-slate-800 px-2 py-1.5 rounded-md border shadow-sm">
+                                    <Avatar className="h-6 w-6 border border-slate-200">
+                                        <AvatarImage src={assignee.photoURL} />
+                                        <AvatarFallback className="text-[9px] bg-blue-50 text-blue-600">
+                                            {assignee.displayName?.charAt(0)}
+                                        </AvatarFallback>
+                                    </Avatar>
+                                    <span className="text-xs font-medium">{assignee.displayName}</span>
                                 </div>
-                            </>
+                            ))
                         ) : (
                             <div className="flex items-center gap-2 text-slate-500">
-                                <div className="h-10 w-10 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center border-2 border-dashed border-slate-300 dark:border-slate-700">
-                                    <User className="h-5 w-5" />
+                                <div className="h-8 w-8 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center border-2 border-dashed border-slate-300 dark:border-slate-700">
+                                    <User className="h-4 w-4" />
                                 </div>
                                 <span className="text-sm italic">No one assigned</span>
                             </div>
@@ -205,9 +293,17 @@ export function TaskDetailsSheet({ task, isOpen, onClose }: TaskDetailsSheetProp
                     <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                         Description
                     </h4>
-                    <div className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed whitespace-pre-wrap bg-slate-50 dark:bg-slate-900/50 p-4 rounded-md border border-slate-100 dark:border-slate-800">
-                        {task.description || <span className="italic text-muted-foreground">No additional description provided.</span>}
-                    </div>
+                    {isEditing ? (
+                        <Textarea 
+                            value={editDescription}
+                            onChange={(e) => setEditDescription(e.target.value)}
+                            className="min-h-[150px] text-sm bg-white"
+                        />
+                    ) : (
+                        <div className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed whitespace-pre-wrap bg-slate-50 dark:bg-slate-900/50 p-4 rounded-md border border-slate-100 dark:border-slate-800">
+                            {task.description || <span className="italic text-muted-foreground">No additional description provided.</span>}
+                        </div>
+                    )}
                 </div>
 
                 {/* Activity / Comments Section */}
@@ -283,6 +379,9 @@ export function TaskDetailsSheet({ task, isOpen, onClose }: TaskDetailsSheetProp
                 </Button>
               </div>
             </div>
+            <p className="text-[10px] text-muted-foreground text-right mt-2 mr-1">
+                Press <kbd className="font-mono bg-slate-100 px-1 rounded">Enter</kbd> to send
+            </p>
           </div>
         </div>
       </SheetContent>
